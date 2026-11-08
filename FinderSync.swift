@@ -3,6 +3,9 @@ import FinderSync
 
 class FinderSync: FIFinderSync {
 
+    /// 最近一次弹出的是不是「空白处」菜单（是的话，忽略可能残留的选中项）
+    private var lastWasContainer = false
+
     override init() {
         super.init()
         FIFinderSyncController.default().directoryURLs = [
@@ -33,6 +36,7 @@ class FinderSync: FIFinderSync {
         }
 
         let showItems = (menuKind == .contextualMenuForContainer) ? false : hasSelection
+        lastWasContainer = !showItems
         let menu = NSMenu(title: "")
 
         // ---- 一级菜单 ----
@@ -40,6 +44,7 @@ class FinderSync: FIFinderSync {
         add(menu, "粘贴", .paste, "doc.on.clipboard")
         add(menu, "在此处打开终端", .openTerminal, "terminal")
         add(menu, "截屏工具", .screenshot, "camera.viewfinder")
+        if showItems { add(menu, "彻底删除", .deleteForever, "trash") }
         menu.addItem(NSMenuItem.separator())
 
         // ---- 新建文件 ----
@@ -52,8 +57,6 @@ class FinderSync: FIFinderSync {
         add(newSub, "Python 脚本 (.py)", .newPy)
         add(newSub, "HTML 网页 (.html)", .newHtml)
         add(newSub, "JSON 文件 (.json)", .newJson)
-        newSub.addItem(NSMenuItem.separator())
-        add(newSub, "文件夹", .newFolder)
         addSub(menu, "新建文件", "doc.badge.plus", newSub)
 
         // ---- 复制路径 ----
@@ -102,7 +105,7 @@ class FinderSync: FIFinderSync {
     @objc func handle(_ sender: AnyObject?) {
         guard let item = sender as? NSMenuItem, let action = RCAction(rawValue: item.tag) else { return }
         let ctl = FIFinderSyncController.default()
-        let selected = (ctl.selectedItemURLs() ?? []).map { $0.path }
+        let selected = lastWasContainer ? [] : (ctl.selectedItemURLs() ?? []).map { $0.path }
         let target = ctl.targetedURL()?.path
         let payload = RCPayload(a: action.rawValue, p: selected, t: target)
         guard let url = payload.url() else { return }

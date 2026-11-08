@@ -22,9 +22,9 @@ func runAction(_ payload: RCPayload) {
     case .screenshot:
         doScreenshot()
     case .newTxt, .newMd, .newDocx, .newXlsx, .newPptx, .newPy, .newHtml, .newJson:
-        doNewFile(action, in: base)
-    case .newFolder:
-        doNewFolder(in: base)
+        doNewFile(action, in: creationDir(urls: urls, target: target))
+    case .deleteForever:
+        doDeleteForever(urls)
     case .copyPath:
         var list = urls
         if list.isEmpty, let t = target { list = [t] }
@@ -213,6 +213,19 @@ private func doScreenshot() {
 
 // MARK: - 新建文件
 
+/// 新建位置：只选中了一个文件夹 -> 建在它里面；否则建在当前窗口所在文件夹
+private func creationDir(urls: [URL], target: URL?) -> URL? {
+    if urls.count == 1, isDirectory(urls[0]) { return urls[0] }
+    if let t = target, isDirectory(t) { return t }
+    return urls.first?.deletingLastPathComponent() ?? target
+}
+
+private func ensureWritable(_ dir: URL) -> Bool {
+    if fm.isWritableFile(atPath: dir.path) { return true }
+    showAlert("无法在这里创建", "没有写入权限：\(dir.path)\n\n请进入具体的文件夹（如桌面、文稿、下载）后再新建。")
+    return false
+}
+
 private func newFileSpec(_ a: RCAction) -> (label: String, ext: String, name: String) {
     switch a {
     case .newTxt:  return ("文本文档", "txt", "未命名文本")
@@ -239,46 +252,11 @@ private func textContent(_ a: RCAction) -> String {
     }
 }
 
-private func askName(title: String, info: String, defaultName: String, ext: String?) -> String? {
-    NSApp.activate(ignoringOtherApps: true)
-    let alert = NSAlert()
-    alert.messageText = title
-    alert.informativeText = info
-    alert.addButton(withTitle: "创建")
-    alert.addButton(withTitle: "取消")
-    let field = NSTextField(frame: NSRect(x: 0, y: 0, width: 300, height: 24))
-    field.stringValue = defaultName
-    alert.accessoryView = field
-    alert.window.initialFirstResponder = field
-    DispatchQueue.main.async {
-        field.selectText(nil)
-        if let editor = field.currentEditor() {
-            let len = (ext == nil)
-                ? defaultName.utf16.count
-                : (defaultName as NSString).deletingPathExtension.utf16.count
-            editor.selectedRange = NSRange(location: 0, length: len)
-        }
-    }
-    guard alert.runModal() == .alertFirstButtonReturn else { return nil }
-    var name = field.stringValue
-        .trimmingCharacters(in: .whitespacesAndNewlines)
-        .replacingOccurrences(of: "/", with: "-")
-    if name.isEmpty { return nil }
-    if let ext = ext, (name as NSString).pathExtension.lowercased() != ext {
-        name += "." + ext
-    }
-    return name
-}
-
 private func doNewFile(_ action: RCAction, in dir: URL?) {
-    guard let dir = dir else { return }
+    guard let dir = dir, ensureWritable(dir) else { return }
     let spec = newFileSpec(action)
-    let suggested = uniqueURL(in: dir, name: spec.name + "." + spec.ext, tag: "").lastPathComponent
-    guard let name = askName(title: "新建\(spec.label)",
-                             info: "创建位置：\(dir.path)",
-                             defaultName: suggested,
-                             ext: spec.ext) else { return }
-    let dest = uniqueURL(in: dir, name: name, tag: "")
+    // 不弹窗：直接用默认名字创建，重名自动加序号，然后在 Finder 里选中
+    let dest = uniqueURL(in: dir, name: spec.name + "." + spec.ext, tag: "")
     do {
         switch action {
         case .newDocx, .newXlsx, .newPptx:
@@ -296,19 +274,44 @@ private func doNewFile(_ action: RCAction, in dir: URL?) {
     }
 }
 
-private func doNewFolder(in dir: URL?) {
-    guard let dir = dir else { return }
-    let suggested = uniqueURL(in: dir, name: "新建文件夹", tag: "").lastPathComponent
-    guard let name = askName(title: "新建文件夹",
-                             info: "创建位置：\(dir.path)",
-                             defaultName: suggested,
-                             ext: nil) else { return }
-    let dest = uniqueURL(in: dir, name: name, tag: "")
-    do {
-        try fm.createDirectory(at: dest, withIntermediateDirectories: false)
-        NSWorkspace.shared.activateFileViewerSelecting([dest])
-    } catch {
-        showAlert("创建失败", error.localizedDescription)
+// MARK: - 彻底删除
+
+private func isProtectedPath(_ url: URL) -> Bool {
+    let path = url.standardizedFileURL.path
+    if path == "/" || path == NSHomeDirectory() { return true }
+    return ["/", "/Users", "/Volumes"].contains(url.standardizedFileURL.deletingLastPathComponent().path)
+}
+
+private func doDeleteForever(_ urls: [URL]) {
+    guard !urls.isEmpty else { return }
+    let protected = urls.filter { isProtectedPath($0) }
+    let targets = urls.filter { !isProtectedPath($0) }
+    if !protected.isEmpty {
+        showAlert("受保护的位置", "出于安全，不能彻底删除这些：\n" + protected.map { $0.path }.joined(separator: "\n"))
+    }
+    guard !targets.isEmpty else { return }
+
+    NSApp.activate(ignoringOtherApps: true)
+    let alert = NSAlert()
+    alert.alertStyle = .critical
+    alert.messageText = targets.count == 1
+        ? "彻底删除“\(targets[0].lastPathComponent)”？"
+        : "彻底删除这 \(targets.count) 个项目？"
+    alert.informativeText = "不会放进废纸篓，删除后无法恢复。"
+    alert.addButton(withTitle: "取消")        // 默认按钮（回车）是取消，防止误删
+    alert.addButton(withTitle: "彻底删除")
+    alert.buttons[1].hasDestructiveAction = true
+    guard alert.runModal() == .alertSecondButtonReturn else { return }
+
+    DispatchQueue.global(qos: .userInitiated).async {
+        var errors: [String] = []
+        for u in targets {
+            do { try fm.removeItem(at: u) }
+            catch { errors.append("\(u.lastPathComponent)：\(error.localizedDescription)") }
+        }
+        DispatchQueue.main.async {
+            if !errors.isEmpty { showAlert("部分项目删除失败", errors.joined(separator: "\n")) }
+        }
     }
 }
 

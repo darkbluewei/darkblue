@@ -11,6 +11,7 @@ enum RCAction: Int {
     case paste = 2
     case openTerminal = 3
     case screenshot = 4
+    case deleteForever = 5
 
     case newTxt = 10
     case newMd = 11
@@ -20,7 +21,6 @@ enum RCAction: Int {
     case newPy = 15
     case newHtml = 16
     case newJson = 17
-    case newFolder = 18
 
     case copyPath = 30
     case copyName = 31
