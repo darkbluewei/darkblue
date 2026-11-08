@@ -2,7 +2,6 @@ name: SuperRightClick
 options:
   deploymentTarget:
     macOS: "13.0"
-  createIntermediateGroups: true
 settings:
   base:
     SWIFT_VERSION: "5.0"
@@ -16,9 +15,15 @@ targets:
     type: application
     platform: macOS
     sources:
-      - path: App
-      - path: Shared
-      - path: Resources
+      - path: main.swift
+      - path: AppDelegate.swift
+      - path: Actions.swift
+      - path: Shared.swift
+      - path: blank.docx
+        buildPhase: resources
+      - path: blank.xlsx
+        buildPhase: resources
+      - path: blank.pptx
         buildPhase: resources
     info:
       path: Config/App-Info.plist
@@ -41,8 +46,8 @@ targets:
     type: app-extension
     platform: macOS
     sources:
-      - path: Extension
-      - path: Shared
+      - path: FinderSync.swift
+      - path: Shared.swift
     info:
       path: Config/Extension-Info.plist
       properties:

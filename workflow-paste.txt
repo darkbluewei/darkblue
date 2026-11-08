@@ -1,0 +1,47 @@
+name: Build macOS app
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [main, master]
+
+jobs:
+  build:
+    runs-on: macos-14
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install XcodeGen
+        run: brew install xcodegen
+
+      - name: Generate Xcode project
+        run: xcodegen generate
+
+      - name: Build (ad-hoc signed)
+        run: |
+          xcodebuild \
+            -project SuperRightClick.xcodeproj \
+            -scheme SuperRightClick \
+            -configuration Release \
+            -derivedDataPath build \
+            CODE_SIGN_STYLE=Manual \
+            CODE_SIGN_IDENTITY="-" \
+            DEVELOPMENT_TEAM="" \
+            ENABLE_HARDENED_RUNTIME=NO \
+            build
+
+      - name: Show signature info
+        run: |
+          APP=build/Build/Products/Release/SuperRightClick.app
+          ls "$APP/Contents/PlugIns"
+          codesign -dv --entitlements - "$APP/Contents/PlugIns/FinderExtension.appex" || true
+
+      - name: Package
+        run: |
+          mkdir dist
+          ditto -c -k --keepParent build/Build/Products/Release/SuperRightClick.app dist/SuperRightClick.zip
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: SuperRightClick
+          path: dist/SuperRightClick.zip
