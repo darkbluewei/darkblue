@@ -1,0 +1,62 @@
+name: SuperRightClick
+options:
+  deploymentTarget:
+    macOS: "13.0"
+  createIntermediateGroups: true
+settings:
+  base:
+    SWIFT_VERSION: "5.0"
+    MARKETING_VERSION: "1.0.0"
+    CURRENT_PROJECT_VERSION: "1"
+    CODE_SIGN_STYLE: Manual
+    CODE_SIGN_IDENTITY: "-"
+    ENABLE_HARDENED_RUNTIME: NO
+targets:
+  SuperRightClick:
+    type: application
+    platform: macOS
+    sources:
+      - path: App
+      - path: Shared
+      - path: Resources
+        buildPhase: resources
+    info:
+      path: Config/App-Info.plist
+      properties:
+        CFBundleName: SuperRightClick
+        CFBundleDisplayName: 超级右键
+        LSUIElement: true
+        LSMinimumSystemVersion: "13.0"
+        CFBundleURLTypes:
+          - CFBundleURLName: com.superrightclick.app
+            CFBundleURLSchemes:
+              - superrightclick
+    settings:
+      base:
+        PRODUCT_NAME: SuperRightClick
+        PRODUCT_BUNDLE_IDENTIFIER: com.superrightclick.app
+    dependencies:
+      - target: FinderExtension
+  FinderExtension:
+    type: app-extension
+    platform: macOS
+    sources:
+      - path: Extension
+      - path: Shared
+    info:
+      path: Config/Extension-Info.plist
+      properties:
+        CFBundleName: FinderExtension
+        CFBundleDisplayName: 超级右键
+        LSMinimumSystemVersion: "13.0"
+        NSExtension:
+          NSExtensionPointIdentifier: com.apple.FinderSync
+          NSExtensionPrincipalClass: $(PRODUCT_MODULE_NAME).FinderSync
+    entitlements:
+      path: Config/Extension.entitlements
+      properties:
+        com.apple.security.app-sandbox: true
+    settings:
+      base:
+        PRODUCT_NAME: FinderExtension
+        PRODUCT_BUNDLE_IDENTIFIER: com.superrightclick.app.FinderExtension
